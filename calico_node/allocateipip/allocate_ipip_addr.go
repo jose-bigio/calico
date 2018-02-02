@@ -70,30 +70,32 @@ func ensureHostTunnelAddress(ctx context.Context, c client.Interface, nodename s
 		log.WithError(err).Fatalf("Unable to retrieve IPIP tunnel address. Error getting node '%s'", nodename)
 	}
 
-	if node.Spec.BGP.IPv4IPIPTunnelAddr == "" {
-		// The IPIP tunnel has no IP address assigned, assign one.
-		log.Debug("IPIP tunnel is not assigned - assign IP")
-		assignHostTunnelAddr(ctx, c, nodename, ipipCidrs)
-	} else if isIpInPool(node.Spec.BGP.IPv4IPIPTunnelAddr, ipipCidrs) {
-		// The IPIP tunnel address is still valid, so leave as it.
-		log.WithField("IP", node.Spec.BGP.IPv4IPIPTunnelAddr).Info("IPIP tunnel address is still valid")
-	} else {
-		// The address that is currently assigned is no longer part
-		// of an IPIP pool, so release the IP, and reassign.
-		log.WithField("IP", node.Spec.BGP.IPv4IPIPTunnelAddr).Info("Reassigning IPIP tunnel address")
-		ipAddr := net.ParseIP(node.Spec.BGP.IPv4IPIPTunnelAddr)
-		if err != nil {
-			log.WithError(err).Fatalf("Failed to parse the CIDR '%s'", node.Spec.BGP.IPv4IPIPTunnelAddr)
-		}
+	if node.Spec.BGP != nil {
+		if node.Spec.BGP.IPv4IPIPTunnelAddr == "" {
+			// The IPIP tunnel has no IP address assigned, assign one.
+			log.Debug("IPIP tunnel is not assigned - assign IP")
+			assignHostTunnelAddr(ctx, c, nodename, ipipCidrs)
+		} else if isIpInPool(node.Spec.BGP.IPv4IPIPTunnelAddr, ipipCidrs) {
+			// The IPIP tunnel address is still valid, so leave as it.
+			log.WithField("IP", node.Spec.BGP.IPv4IPIPTunnelAddr).Info("IPIP tunnel address is still valid")
+		} else {
+			// The address that is currently assigned is no longer part
+			// of an IPIP pool, so release the IP, and reassign.
+			log.WithField("IP", node.Spec.BGP.IPv4IPIPTunnelAddr).Info("Reassigning IPIP tunnel address")
+			ipAddr := net.ParseIP(node.Spec.BGP.IPv4IPIPTunnelAddr)
+			if err != nil {
+				log.WithError(err).Fatalf("Failed to parse the CIDR '%s'", node.Spec.BGP.IPv4IPIPTunnelAddr)
+			}
 
-		ipsToRelease := []net.IP{*ipAddr}
-		_, err := c.IPAM().ReleaseIPs(ctx, ipsToRelease)
-		if err != nil {
-			log.WithField("IP", ipAddr.String()).WithError(err).Fatal("Error releasing non IPIP address")
-		}
+			ipsToRelease := []net.IP{*ipAddr}
+			_, err := c.IPAM().ReleaseIPs(ctx, ipsToRelease)
+			if err != nil {
+				log.WithField("IP", ipAddr.String()).WithError(err).Fatal("Error releasing non IPIP address")
+			}
 
-		// Assign a new tunnel address.
-		assignHostTunnelAddr(ctx, c, nodename, ipipCidrs)
+			// Assign a new tunnel address.
+			assignHostTunnelAddr(ctx, c, nodename, ipipCidrs)
+		}
 	}
 }
 
@@ -107,6 +109,11 @@ func removeHostTunnelAddr(ctx context.Context, c client.Interface, nodename stri
 		node, err := c.Nodes().Get(ctx, nodename, options.GetOptions{})
 		if err != nil {
 			log.WithError(err).Fatalf("Unable to retrieve IPIP tunnel address for cleanup. Error getting node '%s'", nodename)
+		}
+
+		if node.Spec.BGP == nil {
+			log.Debugf("No BGP Spec associated with the node")
+			return
 		}
 
 		if node.Spec.BGP.IPv4IPIPTunnelAddr == "" {
