@@ -1,10 +1,22 @@
+##############################################################################
+# The build architecture is select by setting the ARCH variable.
+# # For example: When building on ppc64le you could use ARCH=ppc64le make <....>.
+# # When ARCH is undefined it defaults to amd64.
+ARCH?=amd64
+ifeq ($(ARCH),amd64)
+	ARCHTAG?=
+	GO_BUILD_VER?=v0.7
+endif
+
+ifeq ($(ARCH),ppc64le)
+	ARCHTAG:=-ppc64le
+	GO_BUILD_VER?=latest
+endif
 ###############################################################################
 # vX.Y format: update during major release process
 RELEASE_STREAM ?= v3.0
 
-###############################################################################
-GO_BUILD_VER?=v0.7
-CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
+CALICO_BUILD?=calico/go-build$(ARCHTAG):$(GO_BUILD_VER)
 
 CALICO_NODE_DIR=$(dir $(realpath $(lastword $(MAKEFILE_LIST))))
 VERSIONS_FILE?=$(CALICO_NODE_DIR)/../_data/versions.yml
@@ -22,9 +34,7 @@ V_CONFD := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)
 V_CALICOCTL := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.calicoctl.version')
 V_CNI := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.calico/cni.version')
 V_FELIX := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.felix.version')
-V_GOBGPD := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.calico-bgp-daemon.version')
 V_KUBE_CONTROLLERS := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.calico/kube-controllers.version')
-V_LIBNETWORK_PLUGIN := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.libnetwork-plugin.version')
 V_TYPHA := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.typha.version')
 V_RR := $(shell cat $(VERSIONS_FILE) | $(YAML_CMD) read - '"$(RELEASE_STREAM)".[0].components.calico/routereflector.version')
 
@@ -37,9 +47,7 @@ CONFD_VER ?= $(V_CONFD)
 CALICOCTL_VER ?= $(V_CALICOCTL)
 CNI_VER ?= $(V_CNI)
 FELIX_VER ?= $(V_FELIX)
-GOBGPD_VER ?= $(V_GOBGPD)
 KUBE_CONTROLLERS_VER ?= $(V_KUBE_CONTROLLERS)
-LIBNETWORK_PLUGIN_VER ?= $(V_LIBNETWORK_PLUGIN)
 TYPHA_VER ?= $(V_TYPHA)
 RR_VER ?= $(V_RR)
 
@@ -50,15 +58,16 @@ $(info $(shell printf "%-21s = %-10s\n" "CONFD_VER" $(CONFD_VER)))
 $(info $(shell printf "%-21s = %-10s\n" "CALICOCTL_VER" $(CALICOCTL_VER)))
 $(info $(shell printf "%-21s = %-10s\n" "CNI_VER" $(CNI_VER)))
 $(info $(shell printf "%-21s = %-10s\n" "FELIX_VER" $(FELIX_VER)))
-$(info $(shell printf "%-21s = %-10s\n" "GOBGPD_VER" $(GOBGPD_VER)))
 $(info $(shell printf "%-21s = %-10s\n" "KUBE_CONTROLLERS_VER" $(KUBE_CONTROLLERS_VER)))
-$(info $(shell printf "%-21s = %-10s\n" "LIBNETWORK_PLUGIN_VER" $(LIBNETWORK_PLUGIN_VER)))
 $(info $(shell printf "%-21s = %-10s\n" "TYPHA_VER" $(TYPHA_VER)))
 $(info $(shell printf "%-21s = %-10s\n" "RR_VER" $(RR_VER)))
 
 SYSTEMTEST_CONTAINER_VER ?= latest
 # we can use "custom" build image and test image name
-SYSTEMTEST_CONTAINER?=calico/test:$(SYSTEMTEST_CONTAINER_VER)
+SYSTEMTEST_CONTAINER?=calico/test$(ARCHTAG):$(SYSTEMTEST_CONTAINER_VER)
+
+ETCD_IMAGE?=quay.io/coreos/etcd:v3.2.5$(ARCHTAG)
+HYPERKUBE_IMAGE?=gcr.io/google_containers/hyperkube-$(ARCH):${K8S_VERSION}
 
 # Ensure that the dist directory is always created
 MAKE_SURE_BIN_EXIST := $(shell mkdir -p dist)
@@ -69,7 +78,6 @@ MAKE_SURE_BIN_EXIST := $(shell mkdir -p dist)
 BIRD_URL?=https://github.com/projectcalico/calico-bird/releases/download/$(BIRD_VER)/bird
 BIRD6_URL?=https://github.com/projectcalico/calico-bird/releases/download/$(BIRD_VER)/bird6
 BIRDCL_URL?=https://github.com/projectcalico/calico-bird/releases/download/$(BIRD_VER)/birdcl
-CALICO_BGP_DAEMON_URL?=https://github.com/projectcalico/calico-bgp-daemon/releases/download/$(GOBGPD_VER)/calico-bgp-daemon
 
 ###############################################################################
 # calico/node build. Contains the following areas
@@ -77,25 +85,26 @@ CALICO_BGP_DAEMON_URL?=https://github.com/projectcalico/calico-bgp-daemon/releas
 # - Build the container itself
 ###############################################################################
 NODE_CONTAINER_DIR=.
-NODE_CONTAINER_NAME?=calico/node
+NODE_CONTAINER_NAME?=calico/node$(ARCHTAG)
 NODE_CONTAINER_FILES=$(shell find $(NODE_CONTAINER_DIR)/filesystem -type f)
 NODE_CONTAINER_CREATED=$(NODE_CONTAINER_DIR)/.calico_node.created
 NODE_CONTAINER_BIN_DIR=$(NODE_CONTAINER_DIR)/filesystem/bin
-NODE_CONTAINER_BINARIES=startup allocate-ipip-addr calico-felix bird calico-bgp-daemon confd libnetwork-plugin
+NODE_CONTAINER_BINARIES=startup allocate-ipip-addr calico-felix bird confd 
+
 FELIX_REPO?=calico/felix
-FELIX_CONTAINER_NAME?=$(FELIX_REPO):$(FELIX_VER)
+FELIX_CONTAINER_NAME?=$(FELIX_REPO)$(ARCHTAG):$(FELIX_VER)
 CONFD_REPO?=calico/confd
-CONFD_CONTAINER_NAME?=$(CONFD_REPO):$(CONFD_VER)
-LIBNETWORK_PLUGIN_REPO?=calico/libnetwork-plugin
-LIBNETWORK_PLUGIN_CONTAINER_NAME?=$(LIBNETWORK_PLUGIN_REPO):$(LIBNETWORK_PLUGIN_VER)
-CTL_CONTAINER_NAME?=calico/ctl:$(CALICOCTL_VER)
+CONFD_CONTAINER_NAME?=$(CONFD_REPO)$(ARCHTAG):$(CONFD_VER)
+CTL_CONTAINER_NAME?=calico/ctl$(ARCHTAG):$(CALICOCTL_VER)
+
+RR_CONTAINER_NAME?=calico/routereflector$(ARCHTAG)
 
 STARTUP_DIR=$(NODE_CONTAINER_DIR)/startup
 STARTUP_FILES=$(shell find $(STARTUP_DIR) -name '*.go')
 ALLOCATE_IPIP_DIR=$(NODE_CONTAINER_DIR)/allocateipip
 ALLOCATE_IPIP_FILES=$(shell find $(ALLOCATE_IPIP_DIR) -name '*.go')
 
-TEST_CONTAINER_NAME?=calico/test:latest
+TEST_CONTAINER_NAME?=calico/test$(ARCHTAG):latest
 TEST_CONTAINER_FILES=$(shell find tests/ -type f ! -name '*.created')
 
 LOCAL_USER_ID?=$(shell id -u $$USER)
@@ -158,19 +167,19 @@ dist/calico-cni-plugin dist/calico-ipam-plugin:
 test_image: calico_test.created ## Create the calico/test image
 
 calico_test.created: $(TEST_CONTAINER_FILES)
-	cd calico_test && docker build -f Dockerfile.calico_test -t $(TEST_CONTAINER_NAME) .
+	cd calico_test && docker build -f Dockerfile$(ARCHTAG).calico_test -t $(TEST_CONTAINER_NAME) .
 	touch calico_test.created
 
-$(NODE_CONTAINER_NAME): $(NODE_CONTAINER_CREATED)    ## Create the calico/node image
+calico/node: $(NODE_CONTAINER_NAME) ## Create the calico/node image
+
+$(NODE_CONTAINER_NAME): $(NODE_CONTAINER_CREATED)
 
 calico-node.tar: $(NODE_CONTAINER_CREATED)
 	# Check versions of the Calico binaries that will be in calico-node.tar.
 	docker run --rm $(NODE_CONTAINER_NAME) /bin/sh -c "\
 	  echo calico-felix --version; /bin/calico-felix --version; \
 	  echo bird --version;         /bin/bird --version; \
-	  echo calico-bgp-daemon -v;   /bin/calico-bgp-daemon -v; \
 	  echo confd --version;        /bin/confd --version; \
-	  echo libnetwork-plugin -v;   /bin/libnetwork-plugin -v; \
 	"
 	docker save --output $@ $(NODE_CONTAINER_NAME)
 
@@ -180,16 +189,14 @@ calico-node-latest.aci: calico-node.tar
 	docker2aci $<
 
 # Build calico/node docker image - explicitly depend on the container binaries.
-$(NODE_CONTAINER_CREATED): $(NODE_CONTAINER_DIR)/Dockerfile $(NODE_CONTAINER_FILES) $(addprefix $(NODE_CONTAINER_BIN_DIR)/,$(NODE_CONTAINER_BINARIES))
+$(NODE_CONTAINER_CREATED): $(NODE_CONTAINER_DIR)/Dockerfile$(ARCHTAG) $(NODE_CONTAINER_FILES) $(addprefix $(NODE_CONTAINER_BIN_DIR)/,$(NODE_CONTAINER_BINARIES))
 	# Check versions of the binaries that we're going to use to build calico/node.
 	# startup: doesn't support --version or -v
 	# allocate-ipip-addr: doesn't support --version or -v
 	$(NODE_CONTAINER_BIN_DIR)/calico-felix --version
 	$(NODE_CONTAINER_BIN_DIR)/bird --version
-	$(NODE_CONTAINER_BIN_DIR)/calico-bgp-daemon -v
 	$(NODE_CONTAINER_BIN_DIR)/confd --version
-	$(NODE_CONTAINER_BIN_DIR)/libnetwork-plugin -v
-	docker build --pull -t $(NODE_CONTAINER_NAME) $(NODE_CONTAINER_DIR)
+	docker build --pull -t $(NODE_CONTAINER_NAME) $(NODE_CONTAINER_DIR) -f $(NODE_CONTAINER_DIR)/Dockerfile$(ARCHTAG)
 	touch $@
 
 # Get felix binaries
@@ -208,16 +215,6 @@ $(NODE_CONTAINER_BIN_DIR)/calico-felix update-felix:
 	  touch $(NODE_CONTAINER_BIN_DIR)/calico-felix
 	-docker rm -f calico-felix
 
-# Get libnetwork-plugin binaries
-$(NODE_CONTAINER_BIN_DIR)/libnetwork-plugin:
-	-docker rm -f calico-$(@F)
-	# Latest libnetwork-plugin binaries are stored in automated builds of calico/libnetwork-plugin.
-	# To get them, we pull that image, then copy the binaries out to our host
-	docker pull $(LIBNETWORK_PLUGIN_CONTAINER_NAME)
-	docker create --name calico-$(@F) $(LIBNETWORK_PLUGIN_CONTAINER_NAME)
-	docker cp calico-$(@F):/$(@F) $(@D)
-	-docker rm -f calico-$(@F)
-
 # Get the confd binary
 $(NODE_CONTAINER_BIN_DIR)/confd:
 	-docker rm -f calico-confd
@@ -233,11 +230,6 @@ $(NODE_CONTAINER_BIN_DIR)/confd:
 	  touch $(NODE_CONTAINER_BIN_DIR)/confd
 	-docker rm -f calico-confd
 	chmod +x $@
-
-# Get the calico-bgp-daemon binary
-$(NODE_CONTAINER_BIN_DIR)/calico-bgp-daemon:
-	$(CURL) -L $(CALICO_BGP_DAEMON_URL) -o $@
-	chmod +x $(@D)/*
 
 # Get bird binaries
 $(NODE_CONTAINER_BIN_DIR)/bird:
@@ -259,12 +251,13 @@ $(NODE_CONTAINER_BIN_DIR)/allocate-ipip-addr: dist/allocate-ipip-addr
 ## Build startup.go
 .PHONY: startup
 startup:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -v -i -o dist/startup $(LDFLAGS) startup/startup.go
+	GOOS=linux GOARCH=$(ARCH) CGO_ENABLED=0 go build -v -i -o dist/startup $(LDFLAGS) startup/startup.go
 
 dist/startup: $(STARTUP_FILES) vendor
 	mkdir -p dist
 	mkdir -p .go-pkg-cache
 	docker run --rm \
+		-e ARCH=$(ARCH) \
 		-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 		-v $(CURDIR)/.go-pkg-cache:/go/pkg/:rw \
 		-v $(CURDIR):/go/src/$(PACKAGE_NAME):ro \
@@ -278,12 +271,13 @@ dist/startup: $(STARTUP_FILES) vendor
 ## Build allocate_ipip_addr.go
 .PHONY: allocate-ipip-addr
 allocate-ipip-addr:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -v -i -o dist/allocate-ipip-addr $(LDFLAGS) allocateipip/allocate_ipip_addr.go
+	GOOS=linux GOARCH=$(ARCH) CGO_ENABLED=0 go build -v -i -o dist/allocate-ipip-addr $(LDFLAGS) allocateipip/allocate_ipip_addr.go
 
 dist/allocate-ipip-addr: $(ALLOCATE_IPIP_FILES) vendor
 	mkdir -p dist
 	mkdir -p .go-pkg-cache
 	docker run --rm \
+	-e ARCH=$(ARCH) \
 	-e LOCAL_USER_ID=$(LOCAL_USER_ID) \
 	-v $(CURDIR)/.go-pkg-cache:/go/pkg/:rw \
 	-v $(CURDIR):/go/src/$(PACKAGE_NAME):ro \
@@ -317,15 +311,17 @@ HOST_CHECKOUT_DIR?=$(shell pwd)
 
 # curl should failed on 404
 CURL=curl -sSf
-## Generate the keys and certificates for running etcd with SSL.
-ssl-certs: certs/.certificates.created    ## Generate self-signed SSL certificates
-certs/.certificates.created:
+
+certs/cfssl certs/cfssljson:
 	mkdir -p certs
 	$(CURL) -L "https://github.com/projectcalico/cfssl/releases/download/1.2.1/cfssl" -o certs/cfssl
 	$(CURL) -L "https://github.com/projectcalico/cfssl/releases/download/1.2.1/cfssljson" -o certs/cfssljson
 	chmod a+x certs/cfssl
 	chmod a+x certs/cfssljson
 
+## Generate the keys and certificates for running etcd with SSL.
+ssl-certs: certs/.certificates.created    ## Generate self-signed SSL certificates
+certs/.certificates.created: certs/cfssl certs/cfssljson
 	certs/cfssl gencert -initca tests/st/ssl-config/ca-csr.json | certs/cfssljson -bare certs/ca
 	certs/cfssl gencert \
 	  -ca certs/ca.pem \
@@ -341,15 +337,15 @@ certs/.certificates.created:
 	touch certs/.certificates.created
 
 busybox.tar:
-	docker pull busybox:latest
-	docker save --output busybox.tar busybox:latest
+	docker pull $(ARCH)/busybox:latest
+	docker save --output busybox.tar $(ARCH)/busybox:latest
 
 routereflector.tar:
-	docker pull calico/routereflector:$(RR_VER)
-	docker save --output routereflector.tar calico/routereflector:$(RR_VER)
+	-docker pull calico/routereflector$(ARCHTAG):$(RR_VER)
+	docker save --output routereflector.tar calico/routereflector$(ARCHTAG):$(RR_VER)
 
 workload.tar:
-	cd workload && docker build -t workload .
+	cd workload && docker build -t workload -f Dockerfile$(ARCHTAG) .
 	docker save --output workload.tar workload
 
 stop-etcd:
@@ -362,7 +358,7 @@ run-etcd-ssl: certs/.certificates.created add-ssl-hostname
 	docker run --detach \
 	--net=host \
 	-v $(SOURCE_DIR)/certs:/etc/calico/certs \
-	--name calico-etcd-ssl quay.io/coreos/etcd \
+	--name calico-etcd-ssl $(ETCD_IMAGE) \
 	etcd \
 	--cert-file "/etc/calico/certs/server.pem" \
 	--key-file "/etc/calico/certs/server-key.pem" \
@@ -404,8 +400,8 @@ st: dist/calicoctl dist/calicoctl-v1.0.2 busybox.tar routereflector.tar calico-n
 	           -e DEBUG_FAILURES=$(DEBUG_FAILURES) \
 	           -e MY_IP=$(LOCAL_IP_ENV) \
 	           -e NODE_CONTAINER_NAME=$(NODE_CONTAINER_NAME) \
-	           -e RR_VER=$(RR_VER) \
-	           --rm -ti \
+		   -e RR_CONTAINER_NAME=$(RR_CONTAINER_NAME):$(RR_VER) \
+	           --rm -t \
 	           -v /var/run/docker.sock:/var/run/docker.sock \
 	           -v $(SOURCE_DIR):/code \
 	           $(SYSTEMTEST_CONTAINER) \
@@ -433,11 +429,12 @@ st-ssl: run-etcd-ssl dist/calicoctl busybox.tar calico-node.tar routereflector.t
 	           -e DEBUG_FAILURES=$(DEBUG_FAILURES) \
 	           -e MY_IP=$(LOCAL_IP_ENV) \
 	           -e NODE_CONTAINER_NAME=$(NODE_CONTAINER_NAME) \
+		   -e RR_CONTAINER_NAME=$(RR_CONTAINER_NAME):$(RR_VER) \
 	           -e ETCD_SCHEME=https \
 	           -e ETCD_CA_CERT_FILE=$(SOURCE_DIR)/certs/ca.pem \
 	           -e ETCD_CERT_FILE=$(SOURCE_DIR)/certs/client.pem \
 	           -e ETCD_KEY_FILE=$(SOURCE_DIR)/certs/client-key.pem \
-	           --rm -ti \
+	           --rm -t \
 	           -v /var/run/docker.sock:/var/run/docker.sock \
 	           -v $(SOURCE_DIR):/code \
 	           -v $(SOURCE_DIR)/certs:$(SOURCE_DIR)/certs \
@@ -458,7 +455,7 @@ run-etcd:
 	@-docker rm -f calico-etcd
 	docker run --detach \
 	-p 2379:2379 \
-	--name calico-etcd quay.io/coreos/etcd \
+	--name calico-etcd $(ETCD_IMAGE) \
 	etcd \
 	--advertise-client-urls "http://$(LOCAL_IP_ENV):2379,http://127.0.0.1:2379" \
 	--listen-client-urls "http://0.0.0.0:2379"
@@ -469,7 +466,7 @@ run-etcd-host:
 	@-docker rm -f calico-etcd
 	docker run --detach \
 	--net=host \
-	--name calico-etcd quay.io/coreos/etcd \
+	--name calico-etcd $(ETCD_IMAGE) \
 	etcd \
 	--advertise-client-urls "http://$(LOCAL_IP_ENV):2379,http://127.0.0.1:2379" \
 	--listen-client-urls "http://0.0.0.0:2379"
@@ -479,7 +476,7 @@ run-k8s-apiserver: stop-k8s-apiserver run-etcd vendor
 	docker run \
 		--net=host --name st-apiserver \
 		--detach \
-		gcr.io/google_containers/hyperkube-amd64:${K8S_VERSION} \
+		${HYPERKUBE_IMAGE} \
 		/hyperkube apiserver \
 			--bind-address=0.0.0.0 \
 			--insecure-bind-address=0.0.0.0 \
@@ -499,7 +496,7 @@ run-k8s-apiserver: stop-k8s-apiserver run-etcd vendor
 		--net=host \
 		--rm \
 		-v  $(CRD_PATH):/manifests \
-		lachlanevenson/k8s-kubectl:${K8S_VERSION} \
+		lachlanevenson/k8s-kubectl$(ARCHTAG):${K8S_VERSION} \
 		--server=http://localhost:8080 \
 		apply -f /manifests/crds.yaml
 
@@ -546,7 +543,6 @@ node-test-containerized: vendor run-etcd-host run-k8s-apiserver
 ## Run calico/node docker-image acceptance tests
 node-test-at:
 	docker run -v $(CALICO_NODE_DIR)tests/at/calico_node_goss.yaml:/tmp/goss.yaml \
-        -e CALICO_BGP_DAEMON_VER=$(GOBGPD_VER) \
         -e CALICO_FELIX_VER=$(FELIX_VER) \
         -e CONFD_VER=$(CONFD_VER) \
 	calico/node:$(CALICO_VER) /bin/sh -c 'apk --no-cache add wget ca-certificates && \
@@ -595,7 +591,6 @@ release: clean
 
 	# Check that the images container the right sub-components
 	docker run $(NODE_CONTAINER_NAME) calico-felix --version
-	docker run $(NODE_CONTAINER_NAME) libnetwork-plugin -v
 
 	@echo "# See RELEASING.md for detailed instructions."
 	@echo "# Now push release images."
