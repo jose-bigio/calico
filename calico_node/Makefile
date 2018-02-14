@@ -590,11 +590,13 @@ node-test-at:
 
 # This depends on clean to ensure that dependent images get untagged and repulled
 # THIS JOB DELETES LOTS OF THINGS - DO NOT RUN IT ON YOUR LOCAL DEV MACHINE.
-.PHONY: semaphore
-semaphore:
+.PHONY: clean-semaphore
+clean-semaphore:
 	# Clean up unwanted files to free disk space.
 	bash -c 'rm -rf /usr/local/golang /opt /var/lib/mongodb /usr/lib/jvm /home/runner/{.npm,.phpbrew,.phpunit,.kerl,.kiex,.lein,.nvm,.npm,.phpbrew,.rbenv}'
 
+.PHONY: semaphore
+semaphore:
 	# Run the containerized UTs first.
 	$(MAKE) node-test-containerized
 
