@@ -99,7 +99,7 @@ NODE_CONTAINER_NAME?=calico/node$(ARCHTAG)
 NODE_CONTAINER_FILES=$(shell find $(NODE_CONTAINER_DIR)/filesystem -type f)
 NODE_CONTAINER_CREATED=$(NODE_CONTAINER_DIR)/.calico_node.created
 NODE_CONTAINER_BIN_DIR=$(NODE_CONTAINER_DIR)/filesystem/bin
-NODE_CONTAINER_BINARIES=startup allocate-ipip-addr calico-felix bird calico-bgp-daemon confd 
+NODE_CONTAINER_BINARIES=calico-bgp-daemon bird startup allocate-ipip-addr confd calico-felix  
 FELIX_REPO?=calico/felix
 FELIX_CONTAINER_NAME?=$(FELIX_REPO)$(ARCHTAG):$(FELIX_VER)
 CONFD_REPO?=calico/confd
@@ -250,6 +250,7 @@ $(NODE_CONTAINER_BIN_DIR)/confd:
 
 # Get the calico-bgp-daemon binary
 $(NODE_CONTAINER_BIN_DIR)/calico-bgp-daemon:
+	mkdir -p $(NODE_CONTAINER_BIN_DIR)
 	$(CURL) -L $(CALICO_BGP_DAEMON_URL) -o $@
 	chmod +x $(@D)/*
 
@@ -257,6 +258,7 @@ $(NODE_CONTAINER_BIN_DIR)/calico-bgp-daemon:
 $(NODE_CONTAINER_BIN_DIR)/bird:
 	# This make target actually downloads the bird6 and birdcl binaries too
 	# Copy patched BIRD daemon with tunnel support.
+	mkdir -p  $(NODE_CONTAINER_BIN_DIR)
 	$(CURL) -L $(BIRD6_URL) -o $(@D)/bird6
 	$(CURL) -L $(BIRDCL_URL) -o $(@D)/birdcl
 	$(CURL) -L $(BIRD_URL) -o $@
